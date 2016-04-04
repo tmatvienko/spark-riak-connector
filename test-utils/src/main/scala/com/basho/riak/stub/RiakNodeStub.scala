@@ -4,6 +4,7 @@ import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.{AsynchronousCloseException, AsynchronousServerSocketChannel, AsynchronousSocketChannel, CompletionHandler}
 
+import com.basho.riak.client.core.util.HostAndPort
 import com.basho.riak.stub.RiakNodeStub._
 import org.slf4j.LoggerFactory
 
@@ -15,7 +16,7 @@ class RiakNodeStub(val host: String, val port: Int, messageHandler: RiakMessageH
   private var serverChannel: AsynchronousServerSocketChannel = _
   private var clients: List[AsynchronousSocketChannel] = Nil
 
-  def start(): InetSocketAddress = {
+  def start(): HostAndPort = {
     serverChannel = AsynchronousServerSocketChannel.open()
     require(serverChannel.isOpen)
 
@@ -38,7 +39,10 @@ class RiakNodeStub(val host: String, val port: Int, messageHandler: RiakMessageH
         case _ => logger.error(s"Something went wrong:  ${serverChannel.toString}", exc);
       }
     })
-    serverChannel.getLocalAddress.asInstanceOf[InetSocketAddress]
+
+    HostAndPort.fromParts(
+      serverChannel.getLocalAddress.asInstanceOf[InetSocketAddress].getHostString,
+      serverChannel.getLocalAddress.asInstanceOf[InetSocketAddress].getPort)
   }
 
   def stop(): Unit = this.synchronized {

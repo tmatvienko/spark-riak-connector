@@ -3,7 +3,7 @@ package com.basho.riak.spark.rdd.failover
 import java.util.concurrent.CountDownLatch
 
 import com.basho.riak.spark._
-import com.basho.riak.stub.{RiakMessageHandler, RequestBasedMessageAdapter}
+import com.basho.riak.stub.{RequestBasedMessageAdapter, RiakMessageHandler}
 import org.junit.rules.ExpectedException
 import org.junit.{After, Rule, Test}
 import shaded.com.basho.riak.protobuf.RiakKvPB._
@@ -11,7 +11,7 @@ import shaded.com.google.protobuf.ByteString
 
 import scala.collection.JavaConverters._
 
-class RequestTimeoutTest extends AbstractFailoverTest {
+class RequestTimeoutTest extends AbstractFailoverOfflineTest {
 
   val _expectedException: ExpectedException = ExpectedException.none()
 
@@ -25,7 +25,7 @@ class RequestTimeoutTest extends AbstractFailoverTest {
         .flatMap {
           case ((a, _), partitionsPerNode) => (0 until partitionsPerNode).map {
             case partitionIndex: Int => RpbCoverageEntry.newBuilder()
-              .setIp(ByteString.copyFromUtf8(a.getHostString))
+              .setIp(ByteString.copyFromUtf8(a.getHost))
               .setPort(a.getPort)
               .setCoverContext(ByteString.copyFromUtf8(""))
               .setKeyspaceDesc(ByteString.copyFromUtf8(s"StubCoverageEntry-${a.toString}-$partitionIndex"))

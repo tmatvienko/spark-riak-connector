@@ -70,4 +70,6 @@ abstract class RequestBasedMessageAdapter extends RequestBasedMessageHandler {
     * @note Don't have implementation and throws <code>NotImplementedError</code> by default.
     */
   override def handleGetRequest(req: RpbGetReq): RpbGetResp = throw new NotImplementedError
+
+  override def onRespond(input: RiakMessage, iterable: Iterable[RiakMessage]): Unit = {}
 }

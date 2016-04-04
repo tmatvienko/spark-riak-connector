@@ -5,6 +5,7 @@ import java.nio.ByteBuffer
 import java.nio.channels._
 
 import com.basho.riak.client.core.RiakMessage
+import com.basho.riak.client.core.util.HostAndPort
 import shaded.com.basho.riak.protobuf.RiakKvPB
 import shaded.com.basho.riak.protobuf.RiakMessageCodes._
 import shaded.com.google.protobuf.ByteString
@@ -15,22 +16,21 @@ import scala.collection.mutable.ArrayBuffer
 /**
   * Forwards all Riak messages to real Riak node
   *
-  * @param host Riak node host
-  * @param port Riak node port
+  * @param hostAndPort instance of com.basho.riak.client.core.util.HostAndPort which points to real Riak node
   */
-class ProxyMessageHandler(val host: String, val port: Int) extends RiakMessageHandler {
+class ProxyMessageHandler(hostAndPort: HostAndPort) extends RiakMessageHandler {
 
-  private final val riakAddress = new InetSocketAddress(host, port)
+  private final val riakAddress = new InetSocketAddress(hostAndPort.getHost, hostAndPort.getPort)
 
   override def handle(context: ClientHandler.Context, input: RiakMessage): Iterable[RiakMessage] = input.getCode match {
-    // modify coverage plan response and replace real node's host and port with proxy
+    // coverage plan received from real Riak node must be modified to replace real node's host and port with proxy
     case MSG_CoverageReq => forwardAndTransform(context, input) { output =>
       val resp = RiakKvPB.RpbCoverageResp.parseFrom(output.getData)
       val modified = RiakKvPB.RpbCoverageResp.newBuilder(resp)
         .clearEntries()
         .addAllEntries(resp.getEntriesList.map { ce =>
           val ceBuilder = RiakKvPB.RpbCoverageEntry.newBuilder(ce)
-          if (ce.getIp.toStringUtf8 == host && ce.getPort == port) {
+          if (ce.getIp.toStringUtf8 == hostAndPort.getHost && ce.getPort == hostAndPort.getPort) {
             val localAddress = context.channel.asInstanceOf[NetworkChannel]
               .getLocalAddress.asInstanceOf[InetSocketAddress]
             ceBuilder.setIp(ByteString.copyFromUtf8(localAddress.getHostString))
@@ -94,4 +94,6 @@ class ProxyMessageHandler(val host: String, val port: Int) extends RiakMessageHa
   private def forwardAndTransform(context: ClientHandler.Context, input: RiakMessage
                                  )(transform: RiakMessage => RiakMessage
                                  ): Iterable[RiakMessage] = forwardMessage(context, input).map(transform(_))
+
+  override def onRespond(input: RiakMessage, output: Iterable[RiakMessage]): Unit = {}
 }

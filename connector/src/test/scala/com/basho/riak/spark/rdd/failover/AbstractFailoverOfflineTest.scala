@@ -1,8 +1,7 @@
 package com.basho.riak.spark.rdd.failover
 
-import java.net.InetSocketAddress
-
 import com.basho.riak.client.core.query.Namespace
+import com.basho.riak.client.core.util.HostAndPort
 import com.basho.riak.stub.{RiakMessageHandler, RiakNodeStub}
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.spark.{Logging, SparkConf, SparkContext}
@@ -12,13 +11,13 @@ import org.junit.{After, Before}
 
 import scala.collection.JavaConversions._
 
-abstract class AbstractFailoverTest extends Logging {
+abstract class AbstractFailoverOfflineTest extends Logging {
 
   protected final val NAMESPACE = new Namespace("default", "test-bucket")
   protected final val COVERAGE_ENTRIES_COUNT = 64
 
   protected var sc: SparkContext = _
-  protected var riakNodes: Seq[(InetSocketAddress, RiakNodeStub)] = _ // tuple InetSocketAddress -> stub
+  protected var riakNodes: Seq[(HostAndPort, RiakNodeStub)] = _ // tuple HostAndPort -> stub
 
   val riakHosts: Int = 1
 
@@ -27,11 +26,11 @@ abstract class AbstractFailoverTest extends Logging {
   def sparkConf: SparkConf = new SparkConf(false)
     .setMaster("local")
     .setAppName(getClass.getSimpleName)
-    .set("spark.riak.connection.host", s"${riakNodes.head._1.getHostString}:${riakNodes.head._1.getPort}")
+    .set("spark.riak.connection.host", riakNodes.map{case (hp, _) => s"${hp.getHost}:${hp.getPort}"}.mkString(","))
     .set("spark.riak.output.wquorum", "1")
     .set("spark.riak.input.fetch-size", "2")
 
-  def initRiakNodes(): Seq[(InetSocketAddress, RiakNodeStub)] = {
+  def initRiakNodes(): Seq[(HostAndPort, RiakNodeStub)] = {
     require(riakMessageHandler.isDefined)
 
     // start riak stubs on localhost and free random port

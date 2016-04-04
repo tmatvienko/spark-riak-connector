@@ -20,6 +20,7 @@ class ClientHandler(val messageHandler: RiakMessageHandler) extends RiakMessageC
           val bytes = channel.write(encoded).get
           assert(bytes == encoded.position())
           logger.info(s"Response sent ${SocketUtils.clientConnectionAsStr(channel)} ($bytes bytes).")
+          messageHandler.onRespond(m, msgs)
         case Some(m) if !channel.isOpen =>
           logger.warn("Impossible to write message to channel: channel has been already closed")
         case None => // TODO: handle case with no message
