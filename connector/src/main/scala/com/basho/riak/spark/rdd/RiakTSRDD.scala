@@ -17,17 +17,18 @@
   */
 package com.basho.riak.spark.rdd
 
-import com.basho.riak.client.core.query.timeseries.{Row, ColumnDescription}
-import com.basho.riak.spark.query.{TSQueryData, QueryTS}
+import com.basho.riak.client.core.query.timeseries.{ Row, ColumnDescription }
+import com.basho.riak.spark.query.{ TSQueryData, QueryTS }
 import com.basho.riak.spark.rdd.connector.RiakConnector
-import com.basho.riak.spark.rdd.partitioner.{RiakTSPartition, RiakTSPartitioner}
-import com.basho.riak.spark.util.{TSConversionUtil, CountingIterator, DataConvertingIterator}
+import com.basho.riak.spark.rdd.partitioner.{ RiakTSPartition, RiakTSPartitioner }
+import com.basho.riak.spark.util.{ TSConversionUtil, CountingIterator, DataConvertingIterator }
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.{TaskContext, Partition, Logging, SparkContext}
+import org.apache.spark.{ TaskContext, Partition, Logging, SparkContext }
 import org.apache.spark.rdd.RDD
 import scala.reflect.ClassTag
 import org.apache.spark.sql.sources.Filter
 import com.basho.riak.spark.rdd.partitioner.{ SinglePartitionRiakTSPartitioner, RangedRiakTSPartitioner }
+import com.basho.riak.spark.query.TSDataQueryingIterator
 
 /**
   * @author Sergey Galkin <srggal at gmail dot com>
@@ -48,48 +49,32 @@ class RiakTSRDD[R] private[spark](
   extends RDD[R](sc, Seq.empty) with Logging {
 
   override def getPartitions: Array[Partition] = {
-     tsRangeFieldName match {
-       case None => SinglePartitionRiakTSPartitioner.partitions(connector.hosts, bucketName, schema, columnNames, query, whereConstraints, filters)
-       case Some(name) => RangedRiakTSPartitioner.partitions(connector.hosts, bucketName, schema, columnNames, filters, name, readConf)
-     } 
-  }
-
-  private def validateSchema(schema: StructType, columns: Seq[ColumnDescription]): Unit = {
-    val columnNames = columns.map(_.getName)
-
-    schema.fieldNames.diff(columnNames).toList match {
-      case Nil => columnNames.diff(schema.fieldNames) match {
-        case Nil =>
-        case diff =>
-          throw new IllegalArgumentException(s"Provided schema has nothing about the following fields returned by query: ${diff.mkString(", ")}")
+    if (filters.isEmpty)
+      SinglePartitionRiakTSPartitioner.partitions(connector.hosts, bucketName, schema, columnNames, query, whereConstraints)
+    else {
+      val partitioner = tsRangeFieldName match {
+        case Some(name) => RangedRiakTSPartitioner(connector.hosts, bucketName, schema, columnNames, filters, readConf, name)
+        case None       => RangedRiakTSPartitioner(connector, bucketName, schema, columnNames, filters, readConf)
       }
-      case diff =>
-        throw new IllegalArgumentException(s"Provided schema contains fields that are not returned by query: ${diff.mkString(", ")}")
+      partitioner.partitions()
     }
   }
 
-  private def computeTS(partitionIdx: Int, context: TaskContext, queryData: TSQueryData) = {
+  private def computeTS(partitionIdx: Int, context: TaskContext, queryData: Seq[TSQueryData]) = {
     // this implicit values is using to pass parameters to 'com.basho.riak.spark.util.TSConversionUtil$.from'
     implicit val schema = this.schema
     implicit val tsTimestampBinding = readConf.tsTimestampBinding
 
     val startTime = System.currentTimeMillis()
-    val q = new QueryTS(BucketDef(bucketName, bucketName), queryData, readConf)
+    val q = new QueryTS(connector, queryData)
 
-    val session = connector.openSession()
-    val convertingIterator: Iterator[R] = q.nextChunk(session) match {
-      case (cds, rows) =>
-        if (this.schema.isDefined && !cds.isEmpty) validateSchema(schema.get, cds)
-        DataConvertingIterator.createTSConverting[R]((cds, rows), TSConversionUtil.from[R])
-    }
-
-    val countingIterator = CountingIterator[R](convertingIterator)
+    val iterator: Iterator[R] = TSDataQueryingIterator[R](q)
+    val countingIterator = CountingIterator[R](iterator)
     context.addTaskCompletionListener { (context) =>
       val endTime = System.currentTimeMillis()
       val duration = (endTime - startTime) / 1000.0
-      logDebug(s"Fetched ${countingIterator.count} rows from ${q.bucket}" +
+      logDebug(s"Fetched ${countingIterator.count} rows from $bucketName" +
         f" for partition $partitionIdx in $duration%.3f s.")
-      session.close()
     }
     countingIterator
   }
@@ -118,14 +103,14 @@ class RiakTSRDD[R] private[spark](
   def select(columns: String*): RiakTSRDD[R] = {
     copy(columnNames = Some(columns))
   }
-  
-  def schema(structType: StructType):RiakTSRDD[R] = {
+
+  def schema(structType: StructType): RiakTSRDD[R] = {
     copy(schema = Option(structType))
   }
 
   /**
-    * Adds a SQL `WHERE` predicate(s) to the query.
-    */
+   * Adds a SQL `WHERE` predicate(s) to the query.
+   */
   def where(sql: String, values: Any*): RiakTSRDD[R] = {
     copy(where = Some((sql, values)))
   }
@@ -133,11 +118,11 @@ class RiakTSRDD[R] private[spark](
   def sql(query: String): RiakTSRDD[R] = {
     copy(query = Some(query))
   }
-  
+
   def filter(filters: Array[Filter]): RiakTSRDD[R] = {
     copy(filters = filters)
   }
-  
+
   def partitionByTimeRanges(tsRangeFieldName: String, filters: Array[Filter]): RiakTSRDD[R] = {
     copy(tsRangeFieldName = Some(tsRangeFieldName), filters = filters)
   }
@@ -148,12 +133,10 @@ class RiakTSRDD[R] private[spark](
   * @since 1.1.0
   */
 object RiakTSRDD {
-  def apply[T](sc: SparkContext, bucketName: String, readConf: ReadConf)
-              (implicit ct: ClassTag[T], connector: RiakConnector): RiakTSRDD[T] =
+  def apply[T](sc: SparkContext, bucketName: String, readConf: ReadConf)(implicit ct: ClassTag[T], connector: RiakConnector): RiakTSRDD[T] =
     new RiakTSRDD[T](sc, connector, bucketName, readConf = readConf)
 
-  def apply[T](sc: SparkContext, bucketName: String, readConf: ReadConf, schema: Option[StructType])
-              (implicit ct: ClassTag[T], connector: RiakConnector): RiakTSRDD[T] =
+  def apply[T](sc: SparkContext, bucketName: String, readConf: ReadConf, schema: Option[StructType])(implicit ct: ClassTag[T], connector: RiakConnector): RiakTSRDD[T] =
     new RiakTSRDD[T](sc, connector, bucketName, schema, readConf = readConf)
 }
 
