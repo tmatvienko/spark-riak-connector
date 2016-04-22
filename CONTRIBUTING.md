@@ -33,6 +33,41 @@ Once you're ready to contribute code back to this repo, start with these steps:
      * Contributors will review your pull request, suggest changes, and merge it when it’s ready and/or offer feedback.
      * To report a bug or issue, please open a new issue against this repository.
 
-You can [read the full guidelines for bug reporting and code contributions](http://docs.basho.com/riak/latest/community/bugs/) on the Riak Docs. 
+You can [read the full guidelines for bug reporting and code contributions](http://docs.basho.com/riak/latest/community/bugs/) on the Riak Docs.
+
+## Developer Certificate of Origin
+
+In order for us to accept pull-requests, the contributor must first read and accept the DCO (Developer Certificate of Origin) 1.1
+
+       Developer's Certificate of Origin 1.1
+
+       By making a contribution to this project, I certify that:
+
+       (a) The contribution was created in whole or in part by me and I
+           have the right to submit it under the open source license
+           indicated in the file; or
+
+       (b) The contribution is based upon previous work that, to the best
+           of my knowledge, is covered under an appropriate open source
+           license and I have the right under that license to submit that
+           work with modifications, whether created in whole or in part
+           by me, under the same open source license (unless I am
+           permitted to submit under a different license), as indicated
+           in the file; or
+
+       (c) The contribution was provided directly to me by some other
+           person who certified (a), (b) or (c) and I have not modified
+           it.
+
+       (d) I understand and agree that this project and the contribution
+           are public and that a record of the contribution (including all
+           personal information I submit with it, including my sign-off) is
+           maintained indefinitely and may be redistributed consistent with
+           this project or the open source license(s) involved.
+
+To agree, include the following line in the git "Commit Message" for any commit (replace your name, e-mail.  Real names only please):
+
+    DCO 1.1 Signed-off-by: Random J Developer <random@developer.org>
+
 
 And **thank you!** Your contribution is incredible important to us.
